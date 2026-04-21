@@ -1,0 +1,805 @@
+﻿Week 8: 
+🚀 PART 0: START HADOOP (HDFS)
+start-dfs.sh
+Check:
+jps
+✔ Should show: NameNode, DataNode, SecondaryNameNode
+________________
+
+
+📂 PART 1: CREATE & UPLOAD FILES
+🔹 Create directories
+hdfs dfs -mkdir /logs
+hdfs dfs -mkdir /json_data
+hdfs dfs -mkdir /sales_data
+________________
+
+
+🔹 Upload files
+hdfs dfs -put sample_log.txt /logs/
+hdfs dfs -put users.json /json_data/
+hdfs dfs -put sales.csv /sales_data/
+Verify:
+hdfs dfs -ls /
+________________
+
+
+⚡ PART 2: START SPARK
+from pyspark.sql import SparkSession
+
+
+spark = SparkSession.builder.appName("FullExamSolution").getOrCreate()
+sc = spark.sparkContext
+________________
+
+
+✅ QUESTION 1: LOG PROCESSING (RDD)
+🔹 Load log file from HDFS
+rdd = sc.textFile("hdfs://localhost:9000/logs/sample_log.txt")
+________________
+
+
+🔹 Extract status codes
+status_codes = rdd.map(lambda line: line.split()[-2])
+________________
+
+
+🔹 Count occurrences
+status_count = status_codes.map(lambda x: (x, 1)) \
+                          .reduceByKey(lambda a, b: a + b)
+
+
+status_count.collect()
+________________
+
+
+🔹 Find most common IPs
+ips = rdd.map(lambda line: line.split()[0])
+
+
+ip_count = ips.map(lambda x: (x, 1)) \
+             .reduceByKey(lambda a, b: a + b)
+
+
+top_ips = ip_count.sortBy(lambda x: x[1], ascending=False)
+
+
+top_ips.collect()
+________________
+
+
+🔹 Filter error logs (4xx & 5xx)
+errors = rdd.filter(lambda line: line.split()[-2].startswith("4") or
+                                line.split()[-2].startswith("5"))
+
+
+error_count = errors.count()
+________________
+
+
+🔹 Save results to HDFS
+status_count.saveAsTextFile("hdfs://localhost:9000/output/status_count")
+top_ips.saveAsTextFile("hdfs://localhost:9000/output/top_ips")
+errors.saveAsTextFile("hdfs://localhost:9000/output/error_logs")
+________________
+
+
+✅ QUESTION 2: JSON PROCESSING (DataFrame)
+🔹 Load JSON
+df = spark.read.json("hdfs://localhost:9000/json_data/users.json")
+df.show()
+________________
+
+
+🔹 Select fields
+df.select("name", "age").show()
+________________
+
+
+🔹 Filter (age > 30)
+df.filter(df.age > 30).show()
+________________
+
+
+🔹 Group by city
+df.groupBy("city").count().show()
+________________
+
+
+🔹 Save to HDFS
+df.write.json("hdfs://localhost:9000/output/json_result")
+________________
+
+
+✅ QUESTION 3: SALES DATA (DataFrame)
+🔹 Load CSV
+sales_df = spark.read.csv(
+   "hdfs://localhost:9000/sales_data/sales.csv",
+   header=True,
+   inferSchema=True
+)
+________________
+
+
+🔹 Add Revenue column
+from pyspark.sql.functions import col
+
+
+sales_df = sales_df.withColumn("Revenue", col("Price") * col("Quantity"))
+________________
+
+
+🔹 Revenue per product
+product_revenue = sales_df.groupBy("Product").sum("Revenue")
+product_revenue.show()
+________________
+
+
+🔹 Highest selling product
+product_revenue.orderBy("sum(Revenue)", ascending=False).show(1)
+________________
+
+
+🔹 Filter revenue > 500
+sales_df.filter(sales_df.Revenue > 500).show()
+________________
+
+
+🔹 Group by category
+category_revenue = sales_df.groupBy("Category").sum("Revenue")
+category_revenue.show()
+________________
+
+
+🔹 Save to HDFS
+sales_df.write.csv("hdfs://localhost:9000/output/sales_result", header=True)
+________________
+
+
+🔚 PART 4: STOP HADOOP
+stop-dfs.sh
+
+
+
+
+
+
+Week-9 Data Analytics using Spark
+Sample Exercise:
+Explore Basic Machine Learning using Apache Spark with HDFS
+• Load data from HDFS into Spark.
+• Perform basic preprocessing (handling categorical and numerical data).
+• Train a regression model to predict employee salaries.
+• Train a classification model to predict employee churn.
+• Train a clustering model to segment employees.
+• Save and load models from HDFS.
+Solution:
+• Start Hadoop services
+start-dfs.sh
+start-yarn.sh
+• Start Spark
+pyspark
+• Upload Dataset to HDFS (company_ml_data.csv)
+Create input file company_ml_data.csv and load it on hdfs
+Install following:
+pip install pyspark
+pip install findspark
+pip install matplotlib pandas
+pip install numpy
+• Write python script (10companydataML.py)
+import matplotlib.pyplot as plt
+import pandas as pdfrom pyspark.sql import SparkSession
+from pyspark.ml.feature import StringIndexer, VectorAssembler, MinMaxScaler
+from pyspark.ml.regression import LinearRegression
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.clustering import KMeans
+from pyspark.ml.evaluation import RegressionEvaluator, BinaryClassificationEvaluator
+# Initialize Spark Session
+spark = SparkSession.builder.appName("ML_Spark_HDFS").getOrCreate()
+# Load CSV Data from HDFS
+df = spark.read.csv("hdfs://localhost:9000/user/studentregno/lab10/company_ml_data.csv",
+header=True, inferSchema=True)
+# Perform Basic Data Analysis
+print("Dataset Sample:")
+df.show(5)
+print("Dataset Schema:")
+df.printSchema()
+# Convert Department (Categorical) into Numeric
+indexer = StringIndexer(inputCol="department", outputCol="department_index")
+df = indexer.fit(df).transform(df)
+# Assemble Features
+assembler = VectorAssembler(inputCols=["age", "salary", "experience"], outputCol="features")
+df = assembler.transform(df)
+# Scale Features
+scaler = MinMaxScaler(inputCol="features", outputCol="scaled_features")df = scaler.fit(df).transform(df)
+# Split Data into Train and Test Sets
+train_df, test_df = df.randomSplit([0.8, 0.2], seed=42)
+# Train Regression Model (Salary Prediction)
+lr = LinearRegression(featuresCol="scaled_features", labelCol="salary")
+reg_model = lr.fit(train_df)
+reg_predictions = reg_model.transform(test_df)
+reg_evaluator = RegressionEvaluator(labelCol="salary", metricName="rmse")
+rmse = reg_evaluator.evaluate(reg_predictions)
+print("Regression RMSE:", rmse)
+# Train Classification Model (Churn Prediction)
+classifier = LogisticRegression(featuresCol="scaled_features", labelCol="churn")
+clf_model = classifier.fit(train_df)
+clf_predictions = clf_model.transform(test_df)
+clf_evaluator = BinaryClassificationEvaluator(labelCol="churn")
+auc = clf_evaluator.evaluate(clf_predictions)
+print("Classification AUC:", auc)
+# Train Clustering Model (Employee Segmentation)
+kmeans = KMeans(featuresCol="scaled_features", k=3)
+kmeans_model = kmeans.fit(df)
+kmeans_predictions = kmeans_model.transform(df)
+kmeans_predictions.select("employee_id", "prediction").show(5)
+# Convert Predictions to Pandas for Visualization
+reg_pandas = reg_predictions.select("salary", "prediction").toPandas()
+clf_pandas = clf_predictions.select("churn", "prediction").toPandas()
+kmeans_pandas = kmeans_predictions.select("employee_id", "prediction").toPandas()# Visualization - Regression (Actual vs Predicted Salary)
+plt.figure(figsize=(8, 5))
+plt.scatter(reg_pandas["salary"], reg_pandas["prediction"], alpha=0.5, color="blue", label="Predicted")
+plt.plot([reg_pandas["salary"].min(), reg_pandas["salary"].max()],
+[reg_pandas["salary"].min(), reg_pandas["salary"].max()],
+color="red", linestyle="--", label="Perfect Prediction")
+plt.xlabel("Actual Salary")
+plt.ylabel("Predicted Salary")
+plt.title("Salary Prediction - Regression")
+plt.legend()
+plt.show()
+# Visualization - Classification (Churn Prediction)
+plt.figure(figsize=(6, 4))
+plt.hist([clf_pandas["churn"][clf_pandas["prediction"] == 0],
+clf_pandas["churn"][clf_pandas["prediction"] == 1]],
+bins=2, label=["No Churn", "Churn"], color=["blue", "red"])
+plt.xticks([0, 1])
+plt.xlabel("Actual Churn")
+plt.ylabel("Count")
+plt.title("Churn Prediction - Classification")
+plt.legend()
+plt.show()
+# Visualization - Clustering (Employee Segments)
+plt.figure(figsize=(7, 5))
+plt.hist(kmeans_pandas["prediction"], bins=3, color="green", edgecolor="black")
+plt.xlabel("Cluster ID")
+plt.ylabel("Number of Employees")
+plt.title("Employee Segmentation - Clustering")plt.show()
+# Save Models to HDFS
+reg_model.save("hdfs://localhost:9000/user/studentregno/lab10/regression_model")
+clf_model.save("hdfs://localhost:9000/user/studentregno/lab10/classification_model")
+kmeans_model.save("hdfs://localhost:9000/user/studentregno/lab10/kmeans_model")
+# Load and Use a Saved Model
+from pyspark.ml.classification import LogisticRegressionModel
+loaded_clf =
+LogisticRegressionModel.load("hdfs://localhost:9000/user/studentregno/lab10/classification_model")
+new_predictions = loaded_clf.transform(test_df)
+new_predictions.select("employee_id", "churn", "prediction").show(5)
+# Stop Spark Session
+spark.stop()
+• Run the script
+cd /usr/local/spark/bin
+spark-submit /home/bdalab/10companydataML.py
+• Results
+Check for Regression RMSE, Classification AUC, prediction and clustering resultsSalary Prediction (Regression)
+• A scatter plot comparing actual vs predicted salaries.
+Churn Prediction (Classification)
+• A histogram comparing actual vs predicted churn labels.Employee Segmentation (Clustering)
+• A bar chart showing the number of employees per cluster.
+• Verify Saved Models in HDFSWeek-
+🚀 PART 0: SETUP (Same for BOTH questions)
+🔹 Start Hadoop
+start-dfs.sh
+start-yarn.sh
+🔹 Upload dataset
+hdfs dfs -mkdir /employee_data
+hdfs dfs -put employee_attrition.csv /employee_data/
+hdfs dfs -put employee_promotion.csv /employee_data/
+________________
+
+
+🔹 Start Spark
+pyspark
+________________
+
+
+🧠 COMMON ML PIPELINE (THIS IS THE KEY)
+Every question follows SAME flow:
+Load → Preprocess → EDA → Feature Engineering → Train → Evaluate → Save
+This is exactly what your sample solution does
+________________
+
+
+✅ QUESTION 1: ATTRITION + SALARY PREDICTION
+________________
+
+
+🔹 Step 1: Load Data
+df = spark.read.csv(
+   "hdfs://localhost:9000/employee_data/employee_attrition.csv",
+   header=True,
+   inferSchema=True
+)
+
+
+df.show(5)
+df.printSchema()
+________________
+
+
+🔹 Step 2: Preprocessing
+Convert categorical → numeric
+from pyspark.ml.feature import StringIndexer
+
+
+indexer = StringIndexer(inputCol="Department", outputCol="DeptIndex")
+df = indexer.fit(df).transform(df)
+________________
+
+
+🔹 Step 3: Feature Engineering
+from pyspark.ml.feature import VectorAssembler
+
+
+assembler = VectorAssembler(
+   inputCols=["Age", "Experience", "DeptIndex"],
+   outputCol="features"
+)
+
+
+df = assembler.transform(df)
+________________
+
+
+🔹 Step 4: Split Data
+train_df, test_df = df.randomSplit([0.8, 0.2], seed=42)
+________________
+
+
+🔍 EDA (Simple but enough for exam)
+df.groupBy("Department").count().show()
+df.describe().show()
+👉 Say this in exam:
+We analyze distribution of features and categorical patterns using groupBy and summary statistics.
+________________
+
+
+🤖 Step 5: Classification (Attrition / Churn)
+from pyspark.ml.classification import LogisticRegression
+
+
+clf = LogisticRegression(featuresCol="features", labelCol="Attrition")
+model_clf = clf.fit(train_df)
+
+
+predictions_clf = model_clf.transform(test_df)
+________________
+
+
+🔹 Evaluation
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+
+
+evaluator = BinaryClassificationEvaluator(labelCol="Attrition")
+auc = evaluator.evaluate(predictions_clf)
+
+
+print("AUC:", auc)
+________________
+
+
+📈 Step 6: Regression (Salary Prediction)
+from pyspark.ml.regression import LinearRegression
+
+
+lr = LinearRegression(featuresCol="features", labelCol="Salary")
+model_reg = lr.fit(train_df)
+
+
+predictions_reg = model_reg.transform(test_df)
+________________
+
+
+🔹 Evaluation
+from pyspark.ml.evaluation import RegressionEvaluator
+
+
+evaluator = RegressionEvaluator(labelCol="Salary", metricName="rmse")
+rmse = evaluator.evaluate(predictions_reg)
+
+
+print("RMSE:", rmse)
+________________
+
+
+📊 Step 7: Visualization
+import matplotlib.pyplot as plt
+
+
+pdf = predictions_reg.select("Salary", "prediction").toPandas()
+
+
+plt.scatter(pdf["Salary"], pdf["prediction"])
+plt.xlabel("Actual")
+plt.ylabel("Predicted")
+plt.title("Salary Prediction")
+plt.show()
+________________
+
+
+💾 Step 8: Save Models
+model_clf.save("hdfs://localhost:9000/output/attrition_model")
+model_reg.save("hdfs://localhost:9000/output/salary_model")
+________________
+
+
+✅ QUESTION 2: PROMOTION PREDICTION
+Same pipeline. Just different label.
+________________
+
+
+🔹 Step 1: Load
+df = spark.read.csv(
+   "hdfs://localhost:9000/employee_data/employee_promotion.csv",
+   header=True,
+   inferSchema=True
+)
+________________
+
+
+🔹 Step 2: Preprocessing
+indexer = StringIndexer(inputCol="Department", outputCol="DeptIndex")
+df = indexer.fit(df).transform(df)
+________________
+
+
+🔹 Step 3: Features
+assembler = VectorAssembler(
+   inputCols=["Age", "Experience", "DeptIndex"],
+   outputCol="features"
+)
+
+
+df = assembler.transform(df)
+________________
+
+
+🔹 Step 4: Train Classification Model
+from pyspark.ml.classification import LogisticRegression
+
+
+clf = LogisticRegression(featuresCol="features", labelCol="Promotion")
+model = clf.fit(df)
+________________
+
+
+🔹 Step 5: Predictions
+predictions = model.transform(df)
+predictions.select("EmployeeID", "Prediction").show()
+________________
+
+
+🔹 Step 6: Evaluation
+evaluator = BinaryClassificationEvaluator(labelCol="Promotion")
+print("AUC:", evaluator.evaluate(predictions))
+________________
+
+
+🔹 Step 7: Visualization
+pdf = predictions.select("Promotion", "prediction").toPandas()
+
+
+plt.hist(pdf["prediction"])
+plt.title("Promotion Prediction")
+plt.show()
+________________
+
+
+🔹 Step 8: Deploy (VERY IMPORTANT 🔥)
+model.save("hdfs://localhost:9000/output/promotion_model")
+Load later:
+from pyspark.ml.classification import LogisticRegressionModel
+
+
+loaded_model = LogisticRegressionModel.load(
+   "hdfs://localhost:9000/output/promotion_model"
+)
+________________
+
+
+Week-10 Introduction to SparkSQL
+Sample Exercise:
+
+
+Explore SparkSQL using Apache Spark with HDFS.
+
+
+Load structured data from HDFS into Spark
+Create DataFrames and SparkSQL temporary views
+Run SQL queries (filtering, grouping, aggregation, joins)
+Use window functions and advanced SQL
+Save SQL query results back to HDFS
+Solution:
+Start Hadoop services
+start-dfs.sh
+start-yarn.sh
+Start Spark
+pyspark
+Upload Dataset to HDFS (employee_data.csv)
+
+
+Create input file employee_data.csv:
+
+
+emp_id,name,age,gender,dept_id,salary,experience
+1,Arun,28,M,10,50000,3
+2,Megha,32,F,20,62000,6
+3,Rahul,45,M,10,80000,20
+4,Sana,29,F,30,55000,4
+5,John,35,M,20,70000,12
+6,Kavya,26,F,30,48000,2
+Upload commands
+hdfs dfs -mkdir /user/studentregno/lab10
+hdfs dfs -put employee_data.csv /user/studentregno/lab10/
+Create Python Script (10SparkSQL.py)
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, avg, max, min, count, sum, rank
+from pyspark.sql.window import Window
+import matplotlib.pyplot as plt
+
+
+# Start Spark Session
+spark = SparkSession.builder.appName("SparkSQL_HDFS_Lab10").getOrCreate()
+
+
+# Load CSV Data from HDFS
+df = spark.read.csv("hdfs://localhost:9000/user/studentregno/lab10/employee_data.csv",
+                    header=True, inferSchema=True)
+
+
+print("Dataset Sample:")
+df.show()
+
+
+print("Schema:")
+df.printSchema()
+
+
+# Create Temporary View
+df.createOrReplaceTempView("employees")
+Basic SQL Queries
+print("Employees With Salary > 60000")
+spark.sql("SELECT * FROM employees WHERE salary > 60000").show()
+print("Department-wise Average Salary")
+spark.sql("""
+SELECT dept_id, AVG(salary) AS avg_salary
+FROM employees
+GROUP BY dept_id
+""").show()
+Join with Department Table
+dept_data = [
+    (10, "Sales"),
+    (20, "Finance"),
+    (30, "HR")
+]
+
+
+dept_df = spark.createDataFrame(dept_data, ["dept_id", "dept_name"])
+dept_df.createOrReplaceTempView("departments")
+
+
+print("Employee with Department Names")
+spark.sql("""
+SELECT e.emp_id, e.name, e.salary, d.dept_name
+FROM employees e
+JOIN departments d
+ON e.dept_id = d.dept_id
+""").show()
+Window Function – Salary Rank
+window = Window.partitionBy("dept_id").orderBy(col("salary").desc())
+
+
+rank_df = df.withColumn("salary_rank", rank().over(window))
+
+
+print("Salary Rank in Each Department:")
+rank_df.show()
+Convert to Pandas for Visualization
+salary_pdf = df.select("name", "salary").toPandas()
+Visualization
+plt.figure(figsize=(7, 5))
+plt.bar(salary_pdf["name"], salary_pdf["salary"], color="skyblue")
+plt.title("Employee Salary Comparison")
+plt.xlabel("Employee")
+plt.ylabel("Salary")
+plt.grid(True)
+plt.show()
+Save Output to HDFS
+output_df = spark.sql("""
+SELECT dept_id, AVG(salary) AS avg_salary
+FROM employees
+GROUP BY dept_id
+""")
+
+
+output_df.write.csv("hdfs://localhost:9000/user/studentregno/lab11/output_avg_salary",
+                    header=True, mode="overwrite")
+
+
+print("Saved department-wise average salary output to HDFS.")
+spark.stop()
+Run the Script
+cd /usr/local/spark/bin
+spark-submit /home/bdalab/11SparkSQLLab.py
+Sample Output (Summary)
++------+-----+---+------+-------+------+----------+
+|emp_id|name |age|gender|dept_id|salary|experience|
++------+-----+---+------+-------+------+----------+
+|1     |Arun |28 |M     |10     |50000 |3         |
+|2     |Megha|32 |F     |20     |62000 |6         |
+|3     |Rahul|45 |M     |10     |80000 |20        |
+|4     |Sana |29 |F     |30     |55000 |4         |
+|5     |John |35 |M     |20     |70000 |12        |
+|6     |Kavya|26 |F     |30     |48000 |2         |
++------+-----+---+------+-------+------+----------+
+
+
+Schema:
+root
+ |-- emp_id: integer
+ |-- name: string
+ |-- age: integer
+ |-- gender: string
+ |-- dept_id: integer
+ |-- salary: integer
+ |-- experience: double
+
+
+
+
+
+
+—---------------------------------------
+
+
+🚀 PART 0: SETUP (Same as always)
+🔹 Start Hadoop
+start-dfs.sh
+start-yarn.sh
+🔹 Upload datasets
+hdfs dfs -mkdir /lab10
+hdfs dfs -put employee_extended.csv /lab10/
+hdfs dfs -put sales_data.csv /lab10/
+🔹 Start Spark
+pyspark
+🧠 CORE IDEA (REMEMBER THIS)
+Load → Create View → SQL Queries → Save
+
+
+That’s SparkSQL in one line.
+
+
+✅ QUESTION 1: EMPLOYEE ANALYTICS (SparkSQL)
+🔹 Step 1: Load data from HDFS
+from pyspark.sql import SparkSession
+
+
+spark = SparkSession.builder.appName("Week10").getOrCreate()
+
+
+df = spark.read.csv(
+    "hdfs://localhost:9000/lab10/employee_extended.csv",
+    header=True,
+    inferSchema=True
+)
+
+
+df.show()
+🔹 Step 2: Create SparkSQL View
+df.createOrReplaceTempView("employees")
+
+
+👉 Now SQL works on it like a table
+
+
+🔹 Step 3: Highest salaried employee in each department
+spark.sql("""
+SELECT *
+FROM (
+    SELECT *,
+           RANK() OVER (PARTITION BY dept_id ORDER BY salary DESC) as rank
+    FROM employees
+) temp
+WHERE rank = 1
+""").show()
+
+
+👉 Uses window function (important for marks)
+
+
+🔹 Step 4: Gender-wise salary analysis
+spark.sql("""
+SELECT gender, AVG(salary) as avg_salary
+FROM employees
+GROUP BY gender
+""").show()
+🔹 Step 5: Save results to HDFS
+result_df = spark.sql("""
+SELECT dept_id, AVG(salary) as avg_salary
+FROM employees
+GROUP BY dept_id
+""")
+
+
+result_df.write.csv(
+    "hdfs://localhost:9000/output/employee_analysis",
+    header=True,
+    mode="overwrite"
+)
+✅ QUESTION 2: SALES DATA (SparkSQL)
+🔹 Step 1: Load data
+sales_df = spark.read.csv(
+    "hdfs://localhost:9000/lab10/sales_data.csv",
+    header=True,
+    inferSchema=True
+)
+
+
+sales_df.createOrReplaceTempView("sales")
+🔹 Step 2: Monthly total sales
+spark.sql("""
+SELECT month(Date) as month, SUM(Price * Quantity) as total_sales
+FROM sales
+GROUP BY month(Date)
+""").show()
+🔹 Step 3: Top 5 customers
+
+
+(Assuming column = CustomerID)
+
+
+spark.sql("""
+SELECT CustomerID, SUM(Price * Quantity) as total_spent
+FROM sales
+GROUP BY CustomerID
+ORDER BY total_spent DESC
+LIMIT 5
+""").show()
+🔹 Step 4: Average revenue per product
+spark.sql("""
+SELECT Product, AVG(Price * Quantity) as avg_revenue
+FROM sales
+GROUP BY Product
+""").show()
+✅ QUESTION 3: DEPARTMENT INSIGHTS (JOINS)
+🔹 Step 1: Create departments table
+dept_data = [
+    (10, "Sales"),
+    (20, "Finance"),
+    (30, "HR")
+]
+
+
+dept_df = spark.createDataFrame(dept_data, ["dept_id", "dept_name"])
+dept_df.createOrReplaceTempView("departments")
+🔹 Step 2: Join employees + departments
+spark.sql("""
+SELECT e.name, d.dept_name
+FROM employees e
+JOIN departments d
+ON e.dept_id = d.dept_id
+""").show()
+🔹 Step 3: Count employees per department
+spark.sql("""
+SELECT dept_id, COUNT(*) as total_employees
+FROM employees
+GROUP BY dept_id
+""").show()
+🔹 Step 4: Departments with avg salary > 60000
+spark.sql("""
+SELECT dept_id, AVG(salary) as avg_salary
+FROM employees
+GROUP BY dept_id
+HAVING avg_salary > 60000
+""").show()
+🔚 STOP EVERYTHING
+stop-dfs.sh
