@@ -1,0 +1,478 @@
+﻿Working with Hive
+Start Hadoop Services
+start-dfs.sh
+start-yarn.sh
+Give permission to Hive directory:
+hdfs dfs -chmod 777 /tmp
+________________
+
+
+Start Hive
+cd /usr/local/hive
+bin/schematool -dbType derby -initSchema
+If error:
+rm -rf metastore_db
+If no error:
+bin/hive
+________________
+
+
+Hive Database Operations
+Create a new database
+CREATE DATABASE sales_db;
+List databases
+SHOW DATABASES;
+Use a database
+USE sales_db;
+Show tables
+SHOW TABLES;
+Drop a database
+DROP DATABASE sales_db CASCADE;
+________________
+
+
+Solved Exercise: E-Commerce Sales Analytics
+Sample Dataset (sales_data.csv)
+transaction_id
+	customer_id
+	product
+	category
+	amount
+	payment_type
+	transaction_date
+	1
+	101
+	Laptop
+	Electronics
+	1200
+	Credit Card
+	2023-01-05
+	2
+	102
+	Phone
+	Electronics
+	800
+	PayPal
+	2023-02-10
+	3
+	103
+	T-shirt
+	Clothing
+	50
+	Debit Card
+	2023-02-15
+	4
+	101
+	Headphones
+	Electronics
+	150
+	Credit Card
+	2023-03-01
+	5
+	104
+	Shoes
+	Footwear
+	120
+	Cash
+	2023-03-20
+	________________
+
+
+Create CSV File
+transaction_id,customer_id,product,category,amount,payment_type,transaction_date
+1,101,Laptop,Electronics,1200,Credit Card,2023-01-05
+2,102,Phone,Electronics,800,PayPal,2023-02-10
+3,103,T-shirt,Clothing,50,Debit Card,2023-02-15
+4,101,Headphones,Electronics,150,Credit Card,2023-03-01
+5,104,Shoes,Footwear,120,Cash,2023-03-20
+________________
+
+
+Upload to HDFS
+hdfs dfs -mkdir /user/studentregno/lab6
+hdfs dfs -put sales_data.csv /user/studentregno/lab6
+________________
+
+
+a. Create Hive Database & Table
+CREATE DATABASE ecommerce;
+USE ecommerce;
+Create Table
+CREATE TABLE sales (
+   transaction_id INT,
+   customer_id INT,
+   product STRING,
+   category STRING,
+   amount FLOAT,
+   payment_type STRING,
+   transaction_date STRING
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+Skip Header
+ALTER TABLE sales SET TBLPROPERTIES ("skip.header.line.count"="1");
+________________
+
+
+b. Load Data from HDFS
+LOAD DATA INPATH '/user/studentregno/lab6/sales_data.csv'
+INTO TABLE sales;
+________________
+
+
+c. Analyze Total Revenue
+SELECT SUM(amount) AS total_revenue FROM sales;
+________________
+
+
+d. Identify Most Popular Product
+SELECT product, COUNT(*) AS sales_count
+FROM sales
+GROUP BY product
+ORDER BY sales_count DESC
+LIMIT 1;
+________________
+
+
+e. Analyze Sales by Payment Method
+SELECT payment_type, COUNT(*) AS transaction_count
+FROM sales
+GROUP BY payment_type;
+________________
+
+
+f. Optimizing Table with Partitioning
+Enable Dynamic Partitioning
+SET hive.exec.dynamic.partition = true;
+SET hive.exec.dynamic.partition.mode = nonstrict;
+________________
+
+
+Create Partitioned Table
+CREATE TABLE sales_partitioned (
+   transaction_id INT,
+   customer_id INT,
+   product STRING,
+   category STRING,
+   amount FLOAT,
+   payment_type STRING
+)
+PARTITIONED BY (year INT)
+STORED AS TEXTFILE;
+________________
+
+
+Load Data into Partitions
+INSERT INTO sales_partitioned PARTITION (year)
+SELECT transaction_id, customer_id, product, category, amount, payment_type,
+      YEAR(TO_DATE(transaction_date)) AS year
+FROM sales;
+________________
+
+
+Show Partitions
+SHOW PARTITIONS sales_partitioned;
+________________
+
+
+Query Partitioned Table
+SELECT * FROM sales_partitioned WHERE year = 2023;
+________________
+
+
+g. Bucketing in Hive
+Concept
+* Divides data into fixed-size buckets
+* Improves query performance
+________________
+
+
+Create Bucketed Table
+CREATE TABLE retail_sales_bucketed (
+   transaction_id INT,
+   customer_id INT,
+   product STRING,
+   category STRING,
+   amount FLOAT,
+   payment_type STRING,
+   transaction_date STRING
+)
+CLUSTERED BY (customer_id) INTO 4 BUCKETS
+STORED AS TEXTFILE;
+________________
+
+
+Enable Bucketing
+SET hive.enforce.bucketing = true;
+________________
+
+
+Load Data
+INSERT OVERWRITE TABLE sales_bucketed
+SELECT * FROM sales
+SORT BY customer_id;
+________________
+
+
+Query Using Buckets
+SELECT * FROM sales_bucketed
+TABLESAMPLE(BUCKET 2 OUT OF 4 ON customer_id);
+—------------------------------------------—------------------------------------------—------------------------------------------—-------------------------------------
+🚀 PART 0: SETUP
+🔹 Start Hadoop
+start-dfs.sh
+start-yarn.sh
+🔹 Fix permissions (IMPORTANT)
+hdfs dfs -chmod 777 /tmp
+🔹 Start Hive
+cd /usr/local/hive
+bin/hive
+🧠 CORE PATTERN (REMEMBER THIS)
+CREATE → LOAD → SELECT → GROUP BY → PARTITION → BUCKET
+✅ QUESTION 1: WEB LOG ANALYSIS
+🔹 a) Create table
+CREATE DATABASE weblog_db;
+USE weblog_db;
+
+
+CREATE TABLE weblogs (
+  log_id INT,
+  ip_address STRING,
+  url STRING,
+  status_code INT,
+  response_time STRING,
+  log_date STRING
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+
+ALTER TABLE weblogs SET TBLPROPERTIES ("skip.header.line.count"="1");
+🔹 Load data
+LOAD DATA INPATH '/user/studentregno/lab6/weblogs.csv'
+INTO TABLE weblogs;
+🔹 b) Most visited URLs
+SELECT url, COUNT(*) AS visits
+FROM weblogs
+GROUP BY url
+ORDER BY visits DESC;
+🔹 c) Peak traffic hours
+SELECT HOUR(from_unixtime(unix_timestamp(log_date))) AS hour,
+       COUNT(*) AS traffic
+FROM weblogs
+GROUP BY HOUR(from_unixtime(unix_timestamp(log_date)))
+ORDER BY traffic DESC;
+🔹 d) Find 404 errors
+SELECT *
+FROM weblogs
+WHERE status_code = 404;
+🔹 e) Partitioned table by date
+SET hive.exec.dynamic.partition = true;
+SET hive.exec.dynamic.partition.mode = nonstrict;
+
+
+CREATE TABLE weblogs_partitioned (
+  log_id INT,
+  ip_address STRING,
+  url STRING,
+  status_code INT,
+  response_time STRING
+)
+PARTITIONED BY (log_date STRING)
+STORED AS TEXTFILE;
+
+
+INSERT INTO weblogs_partitioned PARTITION (log_date)
+SELECT log_id, ip_address, url, status_code, response_time, log_date
+FROM weblogs;
+🔹 f) Bucketed table by status_code
+SET hive.enforce.bucketing = true;
+
+
+CREATE TABLE weblogs_bucketed (
+  log_id INT,
+  ip_address STRING,
+  url STRING,
+  status_code INT,
+  response_time STRING,
+  log_date STRING
+)
+CLUSTERED BY (status_code) INTO 4 BUCKETS
+STORED AS TEXTFILE;
+
+
+INSERT OVERWRITE TABLE weblogs_bucketed
+SELECT * FROM weblogs
+SORT BY status_code;
+✅ QUESTION 2: MOVIE RATINGS
+🔹 Create table
+CREATE DATABASE movie_db;
+USE movie_db;
+
+
+CREATE TABLE movies (
+  movie_id INT,
+  title STRING,
+  genre STRING,
+  release_year INT,
+  user_id INT,
+  rating FLOAT,
+  timestamp STRING
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+
+ALTER TABLE movies SET TBLPROPERTIES ("skip.header.line.count"="1");
+🔹 Load data
+LOAD DATA INPATH '/user/studentregno/lab6/movie_ratings.csv'
+INTO TABLE movies;
+🔹 a) Top 5 highest rated movies
+SELECT title, AVG(rating) AS avg_rating
+FROM movies
+GROUP BY title
+ORDER BY avg_rating DESC
+LIMIT 5;
+🔹 b) Most popular genre
+SELECT genre, COUNT(*) AS count
+FROM movies
+GROUP BY genre
+ORDER BY count DESC
+LIMIT 1;
+🔹 c) Yearly trends
+SELECT YEAR(timestamp) AS year, AVG(rating) AS avg_rating
+FROM movies
+GROUP BY YEAR(timestamp);
+🔹 d) Partitioned table by genre
+CREATE TABLE movies_partitioned (
+  movie_id INT,
+  title STRING,
+  release_year INT,
+  user_id INT,
+  rating FLOAT,
+  timestamp STRING
+)
+PARTITIONED BY (genre STRING)
+STORED AS TEXTFILE;
+
+
+INSERT INTO movies_partitioned PARTITION (genre)
+SELECT movie_id, title, release_year, user_id, rating, timestamp, genre
+FROM movies;
+🔹 Retrieve Sci-Fi movies
+SELECT * FROM movies_partitioned
+WHERE genre = 'Sci-Fi';
+🔹 e) Bucketed table by release_year
+SET hive.enforce.bucketing = true;
+
+
+CREATE TABLE movies_bucketed (
+  movie_id INT,
+  title STRING,
+  genre STRING,
+  release_year INT,
+  user_id INT,
+  rating FLOAT,
+  timestamp STRING
+)
+CLUSTERED BY (release_year) INTO 4 BUCKETS
+STORED AS TEXTFILE;
+
+
+INSERT OVERWRITE TABLE movies_bucketed
+SELECT * FROM movies
+SORT BY release_year;
+🔹 Retrieve 2019 movies
+SELECT * FROM movies_bucketed
+WHERE release_year = 2019;
+✅ QUESTION 3: FLIGHT DATA
+🔹 Create table
+CREATE DATABASE flight_db;
+USE flight_db;
+
+
+CREATE TABLE flights (
+  flight_id INT,
+  airline STRING,
+  flight_number STRING,
+  origin STRING,
+  destination STRING,
+  departure_date STRING,
+  departure_time STRING,
+  arrival_time STRING,
+  delay_minutes INT,
+  status STRING
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+
+ALTER TABLE flights SET TBLPROPERTIES ("skip.header.line.count"="1");
+🔹 Load data
+LOAD DATA INPATH '/user/studentregno/lab6/flight_data.csv'
+INTO TABLE flights;
+🔹 a) Airline with most delays
+SELECT airline, COUNT(*) AS delays
+FROM flights
+WHERE status = 'Delayed'
+GROUP BY airline
+ORDER BY delays DESC
+LIMIT 1;
+🔹 b) Count flights by status
+SELECT status, COUNT(*) AS count
+FROM flights
+GROUP BY status;
+🔹 c) Average delay per airline
+SELECT airline, AVG(delay_minutes) AS avg_delay
+FROM flights
+GROUP BY airline;
+🔹 d) Partitioned table by date
+CREATE TABLE flights_partitioned (
+  flight_id INT,
+  airline STRING,
+  flight_number STRING,
+  origin STRING,
+  destination STRING,
+  departure_time STRING,
+  arrival_time STRING,
+  delay_minutes INT,
+  status STRING
+)
+PARTITIONED BY (departure_date STRING)
+STORED AS TEXTFILE;
+
+
+INSERT INTO flights_partitioned PARTITION (departure_date)
+SELECT flight_id, airline, flight_number, origin, destination,
+       departure_time, arrival_time, delay_minutes, status, departure_date
+FROM flights;
+🔹 e) Bucketed table by airline
+SET hive.enforce.bucketing = true;
+
+
+CREATE TABLE flights_bucketed (
+  flight_id INT,
+  airline STRING,
+  flight_number STRING,
+  origin STRING,
+  destination STRING,
+  departure_date STRING,
+  departure_time STRING,
+  arrival_time STRING,
+  delay_minutes INT,
+  status STRING
+)
+CLUSTERED BY (airline) INTO 4 BUCKETS
+STORED AS TEXTFILE;
+
+
+INSERT OVERWRITE TABLE flights_bucketed
+SELECT * FROM flights
+SORT BY airline;
+🔹 Retrieve Delta flights
+SELECT * FROM flights_bucketed
+WHERE airline = 'Delta';
