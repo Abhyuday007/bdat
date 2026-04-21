@@ -1,0 +1,186 @@
+﻿Week 7 : 
+Basic HBase Commands (HBase Shell):
+Start Hadoop services:
+start-dfs.sh
+start-yarn.sh
+Next Start HBase with following commands
+cd /usr/local/hbase
+bin/start-hbase.sh
+Now check status again by
+jps
+(you should able to see HRegionServer, HQuorumPeer, HMaster)Next run hbase shell:
+./bin/hbase shell
+Creating a Table
+create 'students', 'info', 'contact'
+Inserting Data
+put 'students', '1', 'info:name', 'Alice'
+put 'students', '1', 'info:age', '22'put 'students', '1', 'contact:email', 'alice@gmail.com'
+Retrieving Data
+get 'students', '1'
+scan 'students'
+Updating Data
+put 'students', '1', 'contact:email', 'alice_new@gmail.com'
+Deleting Data
+delete 'students', '1', 'contact:email'
+deleteall 'students', '1'
+Disabling a Table
+disable ‘tablename’
+is_disabled 'table name’
+Enabling a Table
+enable 'tablename
+is_enabled 'table name'
+describedescribe 'table name'
+Dropping a Table
+disable 'students'
+drop 'students'
+Common Filters in HBase
+SingleColumnValueFilter: Filter rows based on a column’s value.
+scan 'students', {FILTER => "SingleColumnValueFilter ('info', 'age', >=, 'binary:20')"}
+PrefixFilter: Fetch records where the row key starts with a given prefix.
+scan 'students', {FILTER => "PrefixFilter('2')"}PageFilter: Implement pagination.
+scan 'students', {FILTER => "PageFilter(1)"}
+—---------------------------
+PART 0: START HADOOP + HBASE
+start-dfs.sh
+start-yarn.sh
+
+
+cd /usr/local/hbase
+bin/start-hbase.sh
+
+
+jps
+
+
+✔ Should show:
+
+
+HMaster
+HRegionServer
+HQuorumPeer
+🔹 Open HBase Shell
+./bin/hbase shell
+✅ QUESTION 1
+🔹 a) CREATE TABLES
+Students table
+create 'students', 'personal', 'academic'
+Employees table
+create 'employees', 'details', 'salary'
+Orders table
+create 'orders', 'customer', 'items', 'payment'
+🔹 b) DESCRIBE TABLES
+describe 'students'
+describe 'employees'
+describe 'orders'
+🔹 c) DELETE & RECREATE orders
+disable 'orders'
+drop 'orders'
+
+
+create 'orders', 'customer', 'items', 'payment'
+🔹 d) INSERT DATA
+Students
+put 'students', 'S1', 'personal:name', 'Alice'
+put 'students', 'S1', 'personal:age', '20'
+put 'students', 'S1', 'academic:marks', '85'
+put 'students', 'S1', 'academic:grade', 'A'
+
+
+put 'students', 'S2', 'personal:name', 'Bob'
+put 'students', 'S2', 'personal:age', '22'
+put 'students', 'S2', 'academic:marks', '75'
+put 'students', 'S2', 'academic:grade', 'B'
+Employees
+put 'employees', 'E1', 'details:name', 'John'
+put 'employees', 'E1', 'details:age', '30'
+put 'employees', 'E1', 'details:department', 'IT'
+put 'employees', 'E1', 'salary:basic', '60000'
+put 'employees', 'E1', 'salary:bonus', '5000'
+
+
+put 'employees', 'E2', 'details:name', 'Sara'
+put 'employees', 'E2', 'details:department', 'HR'
+put 'employees', 'E2', 'salary:basic', '50000'
+Orders
+put 'orders', 'O1', 'customer:name', 'Rahul'
+put 'orders', 'O1', 'customer:email', 'rahul@gmail.com'
+put 'orders', 'O1', 'items:product', 'Laptop'
+put 'orders', 'O1', 'items:quantity', '1'
+put 'orders', 'O1', 'payment:mode', 'Credit Card'
+put 'orders', 'O1', 'payment:amount', '80000'
+🔹 e) Retrieve Name & Marks
+scan 'students', {COLUMNS => ['personal:name', 'academic:marks']}
+🔹 f) Employees with salary > 55000
+scan 'employees', {
+  FILTER => "SingleColumnValueFilter('salary','basic',>, 'binary:55000')"
+}
+🔹 g) Top 3 orders
+scan 'orders', {FILTER => "PageFilter(3)"}
+🔹 h) Students with marks > 80
+scan 'students', {
+  FILTER => "SingleColumnValueFilter('academic','marks',>, 'binary:80')"
+}
+🔹 i) Employees in IT
+scan 'employees', {
+  FILTER => "SingleColumnValueFilter('details','department',=, 'binary:IT')"
+}
+🔹 j) Orders with Credit Card
+scan 'orders', {
+  FILTER => "SingleColumnValueFilter('payment','mode',=, 'binary:Credit Card')"
+}
+🔹 k) Count rows in employees
+count 'employees'
+🔹 l) Oldest student
+scan 'students', {
+  FILTER => "SingleColumnValueFilter('personal','age',>=, 'binary:0')"
+}
+
+
+👉 (HBase doesn’t directly give max easily—mention this in viva)
+
+
+✅ QUESTION 2 (LIBRARY)
+🔹 a) Create table
+create 'library', 'book_info', 'availability'
+🔹 b) Insert data
+put 'library', 'B001', 'book_info:title', 'DBMS'
+put 'library', 'B001', 'availability:status', 'Available'
+
+
+put 'library', 'B002', 'book_info:title', 'AI'
+put 'library', 'B002', 'availability:status', 'Borrowed'
+🔹 c) Details of B002
+get 'library', 'B002'
+🔹 d) Available books
+scan 'library', {
+  FILTER => "SingleColumnValueFilter('availability','status',=,'binary:Available')"
+}
+🔹 e) Update B003
+put 'library', 'B003', 'availability:status', 'Borrowed'
+put 'library', 'B003', 'availability:borrower', 'Michael'
+🔹 f) Count books
+count 'library'
+✅ QUESTION 3 (TRANSACTIONS)
+🔹 a) Create table
+create 'transactions', 'customer_info', 'transaction_details'
+🔹 b) Insert data
+put 'transactions', 'T001', 'customer_info:name', 'Amit'
+put 'transactions', 'T001', 'transaction_details:amount', '4000'
+put 'transactions', 'T001', 'transaction_details:mode', 'Credit Card'
+🔹 c) Amount > 3000
+scan 'transactions', {
+  FILTER => "SingleColumnValueFilter('transaction_details','amount',>, 'binary:3000')"
+}
+🔹 d) Credit Card transactions
+scan 'transactions', {
+  FILTER => "SingleColumnValueFilter('transaction_details','mode',=,'binary:Credit Card')"
+}
+🔹 e) Names + amount
+scan 'transactions', {
+  COLUMNS => ['customer_info:name', 'transaction_details:amount']
+}
+🔹 f) Delete T002
+deleteall 'transactions', 'T002'
+🔚 STOP HBASE
+stop-hbase.sh
+stop-dfs.sh
